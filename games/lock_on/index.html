@@ -406,7 +406,7 @@
   const SAVE_KEY = "lorpcade:lock_on:save";
   const saveNote = document.getElementById("saveNote");
   const say = (t) => { saveNote.textContent = t; };
-  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (_) {}
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist().catch(() => {}); } catch (_) {}
   function readSave() { try { return localStorage.getItem(SAVE_KEY); } catch (_) { return null; } }
 
   document.getElementById("saveExport").addEventListener("click", async (e) => {
@@ -439,7 +439,7 @@
   });
 
   // ---------------------------------------------------------------------------------------------
-  // The LORPcade home page (https://flukerphones.github.io/lorpcade/). The game lives in a folder one level
+  // The LORPcade home page (https://lorpcade.github.io/). The game lives in a folder one level
   // below it, so "../" reaches the home page wherever the site is hosted; the <meta name="lorpcade-home">
   // in the <head> can point elsewhere.
   //  * esGoHome: the title screen's QUIT. Leaves fullscreen / the landscape lock first, then navigates.
@@ -494,7 +494,9 @@
     hint.textContent = "Use a recent Chrome, Edge, Firefox or Safari with WebGPU enabled, on a device with a supported GPU.";
   } else {
     // Any panic in the game ends up here (the wasm module traps).
-    window.addEventListener("error", () => fail("Something went wrong."));
+    // (browsers report a harmless "ResizeObserver loop" notice - winit watches the canvas size - through the same event;
+    // it is not a crash and must not put the error screen over a running game)
+    window.addEventListener("error", (e) => { if (/ResizeObserver/i.test((e && e.message) || "")) return; fail("Something went wrong."); });
     window.addEventListener("unhandledrejection", () => fail("Something went wrong."));
 
     cloudStart().then(() => init()).then(() => {
