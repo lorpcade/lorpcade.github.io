@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>CINDERFRAME</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0b0810">
+<!-- LORPcade: the game's folder name on lorpcade.github.io (save keys use it), and where QUIT goes -->
+<meta name="lorpcade-slug" content="cinderframe">
+<meta name="lorpcade-home" content="../">
+<style>
+  html,body{margin:0;height:100%;background:#0b0810;overflow:hidden;overscroll-behavior:none;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}
+  canvas#game{position:fixed;inset:0;width:100vw;height:100vh;height:100dvh;display:block;touch-action:none;outline:none}
+  #loading{position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;
+    color:#ff8a3c;font:700 28px/1.2 ui-monospace,Consolas,monospace;letter-spacing:.4em;pointer-events:none;background:#0b0810}
+  #loading small{margin-top:14px;font-size:13px;letter-spacing:.15em;color:#8a7aa0;max-width:80vw;text-align:center}
+  /* "the cloud save changed on another device" */
+  #stale{position:fixed;top:0;left:0;right:0;z-index:30;display:flex;gap:10px;align-items:center;justify-content:center;
+    flex-wrap:wrap;padding:8px 12px;background:#ff8a3c;color:#0b0810;font:600 14px/1.3 system-ui,sans-serif}
+  #stale[hidden]{display:none}
+  #stale button{font:inherit;padding:4px 10px;border:2px solid #0b0810;background:transparent;color:inherit;cursor:pointer}
+  /* EXPORT / IMPORT SAVE: a small, quiet control in the bottom-left corner */
+  #savetools{position:fixed;left:max(8px,env(safe-area-inset-left));bottom:max(8px,env(safe-area-inset-bottom));z-index:20;
+    display:flex;gap:6px;align-items:center;font:600 12px/1 ui-monospace,Consolas,monospace;letter-spacing:.08em}
+  #savetools button{font:inherit;letter-spacing:inherit;color:#ff8a3c;background:rgba(11,8,16,.85);border:1px solid #5a4a70;
+    padding:7px 10px;cursor:pointer;opacity:.45}
+  #savetools button:hover,#savetools button:focus-visible,#savetools.open button{opacity:1}
+  #savetools .tool{display:none}
+  #savetools.open .tool{display:inline-block}
+  #savemsg{position:fixed;left:50%;bottom:max(52px,calc(env(safe-area-inset-bottom) + 44px));transform:translateX(-50%);z-index:31;
+    max-width:min(90vw,520px);padding:8px 12px;background:#0b0810;color:#ffd9b8;border:1px solid #ff8a3c;
+    font:600 13px/1.3 system-ui,sans-serif;text-align:center}
+  #savemsg[hidden]{display:none}
+</style>
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+<div id="loading">CINDERFRAME<small id="status">loading...</small>
+</div>
+<div id="stale" hidden role="status">A newer save was found on another device.
+  <button id="staleReload" type="button">RELOAD</button> <button id="staleClose" type="button" aria-label="Dismiss">&times;</button></div>
+<div id="savetools">
+  <button id="saveToggle" type="button" aria-expanded="false" aria-label="Save backup tools" title="Save backup (export / import)">SAVE</button>
+  <button class="tool" id="saveExport" type="button">EXPORT</button>
+  <button class="tool" id="saveImport" type="button">IMPORT</button>
+</div>
+<div id="savemsg" hidden role="status"></div>
+<script src="../arcade-assets/lorpcade-sync.js"></script>
+<script type="module">
+  import init from "./cinderframe.js";
+  const status = document.getElementById("status");
+  document.addEventListener("contextmenu", e => e.preventDefault());
+  document.addEventListener("gesturestart", e => e.preventDefault());
+
+  // ---- LORPcade: slug, QUIT -> home page
+  const folderName = (() => {
+    const meta = document.querySelector('meta[name="lorpcade-slug"]');
+    if (meta && meta.content) return meta.content;
+    const parts = location.pathname.split("/").filter(Boolean);
+    if (parts.length && /\.[a-z0-9]+$/i.test(parts[parts.length - 1])) parts.pop();
+    return parts.length ? decodeURIComponent(parts[parts.length - 1]) : "cinderframe";
+  })();
+  const homeMeta = document.querySelector('meta[name="lorpcade-home"]');
+  window.esGoHome = () => {
+    try { if (document.fullscreenElement) document.exitFullscreen(); } catch (_) {}
+    try { if (screen.orientation && screen.orientation.unlock) screen.orientation.unlock(); } catch (_) {}
+    location.assign(new URL((homeMeta && homeMeta.content) || "../", location.href).href);
+  };
+
+  // ---- LORPcade: optional cloud save sync (404 when served alone = no sync, no errors)
+  const SYNC = window.LorpSync || null;
+  async function cloudStart() {
+    if (!SYNC) return;
+    try {
+      // refuse cloud data that is not a real sealed save of this game
+      SYNC.validators[folderName] = (name, text) => name === "save" ? /^CFSAVE1:[A-Za-z0-9_-]+$/.test(text)
+                                                   : name !== "hiscore" || /^[0-9]{1,15}$/.test(text);
+      await SYNC.ready;
+      if (!SYNC.enabled) return;
+      if (SYNC.getCode()) await SYNC.syncGame(folderName, { timeout: 4000 });   // never rejects; gives up after 4 s
+      SYNC.watch(folderName, { onRemote: () => { stale.hidden = false; } }); // another device changed the cloud copy
+    } catch (_) {}
+  }
+
+  const stale = document.getElementById("stale");
+  document.getElementById("staleReload").addEventListener("click", () => location.reload());
+  document.getElementById("staleClose").addEventListener("click", () => { stale.hidden = true; });
+
+  // ask the browser not to clear this site's data automatically (the save lives in localStorage)
+  try { if (navigator.storage && navigator.storage.persist) navigator.storage.persist(); } catch (_) {}
+
+  // ---- LORPcade: EXPORT / IMPORT SAVE (page code only; the game reads its save once, at boot, so import reloads)
+  // The exported text is the same line the Windows build keeps in %APPDATA%\LORPcade\cinderframe_save.txt.
+  const SAVE_KEY = "lorpcade:" + folderName + ":save";
+  const SEALED = /^\s*CFSAVE1:[A-Za-z0-9_-]+\s*$/;   // never accept anything that is not a sealed Cinderframe save
+  const savemsg = document.getElementById("savemsg");
+  let msgTimer = 0;
+  const say = (t) => {
+    savemsg.textContent = t; savemsg.hidden = false;
+    clearTimeout(msgTimer); msgTimer = setTimeout(() => { savemsg.hidden = true; }, 6000);
+  };
+  window.esExportSave = async () => {                  // call from a user gesture (a click or tap)
+    let txt = null; try { txt = localStorage.getItem(SAVE_KEY); } catch (_) {}
+    if (!txt) return say("Nothing to export yet.");
+    const url = URL.createObjectURL(new Blob([txt], { type: "text/plain" }));
+    const a = document.createElement("a"); a.href = url; a.download = folderName + "-save.txt";
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+    let copied = false; try { await navigator.clipboard.writeText(txt); copied = true; } catch (_) {}
+    say("Saved " + folderName + "-save.txt" + (copied ? " (and copied to the clipboard)" : "") + ". Use IMPORT on the other device.");
+  };
+  const picker = Object.assign(document.createElement("input"), { type: "file", accept: ".txt,text/plain", hidden: true });
+  document.body.appendChild(picker);
+  picker.addEventListener("change", async () => {
+    const f = picker.files && picker.files[0]; picker.value = ""; if (!f) return;
+    const txt = await f.text();
+    if (!SEALED.test(txt)) return say("That does not look like a save file for this game.");
+    let have = null; try { have = localStorage.getItem(SAVE_KEY); } catch (_) {}
+    if (have && !confirm("Replace the progress saved in this browser with the imported save?")) return;
+    try { localStorage.setItem(SAVE_KEY, txt.trim()); location.reload(); }   // reload: the running game still holds the old save
+    catch (_) { say("Could not write the save (is storage blocked?)."); }
+  });
+  window.esImportSave = () => picker.click();          // must run inside the user's click/tap, or the browser blocks the picker
+  const tools = document.getElementById("savetools");
+  document.getElementById("saveToggle").addEventListener("click", (e) => {
+    const open = tools.classList.toggle("open"); e.currentTarget.setAttribute("aria-expanded", String(open));
+    const c = document.getElementById("game"); if (c && c.focus) c.focus();
+  });
+  document.getElementById("saveExport").addEventListener("click", () => window.esExportSave());
+  document.getElementById("saveImport").addEventListener("click", () => window.esImportSave());
+
+  // title-screen CLOUD button: "" hides it; else "ON" "OFF" "SYNCING" "OFFLINE" "ERROR"
+  window.esSyncInfo = () => (SYNC && SYNC.enabled ? SYNC.label() : "");
+  window.esSyncOpen = () => { if (SYNC) SYNC.openDialog({ slugs: [folderName], onApplied: () => location.reload() }); };
+
+  try {
+    await cloudStart();   // before init(): the game reads its save once, at boot
+    await init();
+  } catch (e) {
+    // winit uses an exception for control flow on the web; ignore that one.
+    if (!String(e).includes("Using exceptions for control flow")) {
+      status.textContent = "Failed to start: " + e;
+      console.error(e);
+    }
+  }
+</script>
+</body>
+</html>
