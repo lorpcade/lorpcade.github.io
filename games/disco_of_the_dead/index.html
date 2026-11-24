@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>DISCO OF THE DEAD</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; }
+  #game { display: block; width: 100vw !important; height: 100vh !important; outline: none; cursor: default; }
+  #msg { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+         color: #ff7bd8; font: 20px monospace; pointer-events: none; text-align: center; padding: 1em; }
+</style>
+</head>
+<body>
+<canvas id="game" tabindex="0"></canvas>
+<div id="msg">LOADING...</div>
+<script type="module">
+  import init from './disco-of-the-dead.js';
+  const msg = document.getElementById('msg');
+  init().then(() => { msg.remove(); document.getElementById('game').focus(); })
+        .catch((e) => {
+          // winit may throw a harmless control-flow "exception" on web
+          if (String(e).includes('control flow')) { msg.remove(); return; }
+          console.error(e);
+          msg.textContent = 'Failed to start: ' + e;
+        });
+</script>
+</body>
+</html>
