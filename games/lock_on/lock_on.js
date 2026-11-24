@@ -530,10 +530,6 @@ function __wbg_get_imports() {
             const ret = arg0.matches;
             return ret;
         },
-        __wbg_maxDatagramSize_f31d931ff88c7b74: function(arg0) {
-            const ret = arg0.maxDatagramSize;
-            return ret;
-        },
         __wbg_metaKey_33c588e07fd74724: function(arg0) {
             const ret = arg0.metaKey;
             return ret;
