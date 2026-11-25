@@ -113,6 +113,8 @@
   if (MOBILE) document.body.classList.add("mobile");
 
   window.esIsMobile = () => MOBILE;
+  // `?fps=30` makes the game's quality governor hold that frame rate instead of the display's (see src/gfx/quality.rs)
+  window.esFpsCap = () => { const f = parseFloat(params.get("fps")); return f > 0 ? f : 0; };
 
   if (MOBILE) {
     // no pinch zoom, no scrolling, no long-press menu: it is a game
@@ -431,8 +433,10 @@
     const f = saveFile.files && saveFile.files[0];
     saveFile.value = "";
     if (!f) return;
-    const txt = await f.text();
-    const looksRight = /^\s*LOSAVE1:[A-Za-z0-9_-]+\s*$/.test(txt) || (/^credits=\d+/m.test(txt) && /^levels=/m.test(txt));
+    let txt;
+    try { txt = await f.text(); } catch (_) { say("Could not read that file."); return; }
+    // Plain text is deliberately not importable: it is trivially hand-editable (see H1).
+    const looksRight = /^\s*LOSAVE1:[A-Za-z0-9_-]+\s*$/.test(txt);
     if (!looksRight) { say("That does not look like a Lock-On save file."); return; }
     if (readSave() && !confirm("Replace the progress saved in this browser with the imported save?")) return;
     try { localStorage.setItem(SAVE_KEY, txt); location.reload(); } catch (_) { say("Could not write the save (is storage blocked?)."); }
@@ -471,7 +475,9 @@
   async function acquireWakeLock() {
     try { if ("wakeLock" in navigator) wakeLock = await navigator.wakeLock.request("screen"); } catch (_) {}
   }
-  document.addEventListener("visibilitychange", () => { if (MOBILE && document.visibilityState === "visible" && !overlay.classList.contains("ready")) acquireWakeLock(); });
+  // Browsers drop the lock while the tab is hidden; ask again on every return, not only before the
+  // start overlay is dismissed (the "ready" class is added once and never removed).
+  document.addEventListener("visibilitychange", () => { if (MOBILE && document.visibilityState === "visible") acquireWakeLock(); });
 
   async function startMobile() {
     // the requests must be made straight from the tap, so fire them together
