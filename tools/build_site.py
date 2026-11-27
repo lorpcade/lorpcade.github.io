@@ -26,13 +26,14 @@ ROOT = Path(__file__).resolve().parent.parent
 SITE_SRC = Path(__file__).resolve().parent / "site"
 ASSETS = "arcade-assets"  # the home screen's own files; can't be used as a game name
 SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_-]*$")
-# Cabinet images picked up automatically, in priority order: cover.* first, then the older thumb.* names.
-COVERS = tuple(f"{stem}.{ext}" for stem in ("cover", "thumb") for ext in ("jpg", "jpeg", "webp", "png", "gif"))
+# Cabinet images picked up automatically, in priority order: cover.* first (cover.webp is what a game's build.bat makes:
+# 512x512, quality 75), then the older thumb.* names.
+COVERS = tuple(f"{stem}.{ext}" for stem in ("cover", "thumb") for ext in ("webp", "jpg", "jpeg", "png", "gif"))
 KNOWN_KEYS = {"title", "accent", "order", "hidden", "thumbnail", "highscore"}  # everything else in game.json is ignored
 MENU_MUSIC = "main_menu.opus"  # tools/site/music/main_menu.opus -> played on the home screen when Sound is on
 HEX_RE = re.compile(r"^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$")
 NOT_GAMES = {"tools", "games", ASSETS, "node_modules"}  # top-level folders never treated as games
-RESERVED_SLUGS = {"sync", "backup", "hiscore"}  # would collide with the cloud-save keys (lorpcade:sync:..., see README)
+RESERVED_SLUGS = {"sync", "backup", "hiscore", "profile"}  # would collide with the cloud-save keys (lorpcade:sync:..., see README)
 SYNC_FILES = ("lorpcade-sync.js", "sync-config.json")  # tools/site/ -> <site>/arcade-assets/ (shared by the home screen and every game)
 
 
@@ -139,10 +140,23 @@ def load_game(slug, folder):
         "hidden": raw.get("hidden") is True,
         "thumb": thumb,
         "hiscore": hiscore,
+        # the native Windows build, if the game ships one: <slug>/<slug>.exe next to the wasm (see README)
+        "exe": f"{slug}.exe" if (folder / f"{slug}.exe").is_file() else None,
     }
 
 
 # ---------------------------------------------------------------- rendering
+
+# The white Windows logo, 90s style (the waving four-pane flag). One colour only: white (the page adds a hard dark shadow).
+WIN_LOGO = (
+    '<svg class="winlogo" viewBox="0 0 32 32" aria-hidden="true" focusable="false">'
+    '<path fill="#fff" d="M3 6.2c3.6-1.7 6.6-1.4 10.4.4v8.1c-3.8-1.8-6.8-2.1-10.4-.4z"/>'
+    '<path fill="#fff" d="M15.4 7.5c3.7 1.7 7.4 1.7 13.6-1.3v8.1c-6.2 3-9.9 3-13.6 1.2z"/>'
+    '<path fill="#fff" d="M3 17.4c3.6-1.7 6.6-1.4 10.4.4v8.1c-3.8-1.8-6.8-2.1-10.4-.4z"/>'
+    '<path fill="#fff" d="M15.4 18.8c3.7 1.7 7.4 1.7 13.6-1.3v8.1c-6.2 3-9.9 3-13.6 1.2z"/>'
+    '</svg>'
+)
+
 
 def render_card(game):
     e = html.escape
@@ -158,6 +172,11 @@ def render_card(game):
             hi_attrs += f' data-hi-field="{e(hs["field"])}"'
     hi_digits = hs["digits"] if hs else 6
     hi_zero = "0" * hi_digits if hi_digits else "0"      # shown until the game has saved a score
+    exe = ""
+    if game["exe"]:
+        # a sibling of the cabinet link, not inside it (a link may not contain a link); the page's CSS lifts it with the cabinet
+        exe = (f'<a class="exe" href="{e(game["slug"])}/{e(game["exe"])}" download style="--accent:{game["accent"]}" '
+               f'title="Download the Windows version (.exe)" aria-label="Download {e(game["title"])} for Windows">{WIN_LOGO}</a>')
     return f"""
       <li class="slot">
         <a class="cab" href="{game["slug"]}/" style="--accent:{game["accent"]}"{hi_attrs}>
@@ -166,7 +185,7 @@ def render_card(game):
             <div class="bezel"><div class="screen">{art}<span class="glass" aria-hidden="true"></span></div></div>
             <div class="deck">HI <b class="hi-val">{hi_zero}</b></div>
           </div></div>
-        </a>
+        </a>{exe}
       </li>"""
 
 

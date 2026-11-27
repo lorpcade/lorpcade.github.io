@@ -32,7 +32,7 @@
   const CODE_RE = /^[2-9A-HJ-NP-Z]{12}$/;
   const SLUG_RE = /^[A-Za-z0-9][A-Za-z0-9_-]{0,39}$/;
   const NAME_RE = /^[A-Za-z0-9_-]{1,40}$/;
-  const RESERVED = new Set(["sync", "backup", "hiscore"]); // folder names that would collide with our own keys
+  const RESERVED = new Set(["sync", "backup", "hiscore", "profile"]); // folder names that would collide with our own keys
   const MAX_VALUE = 200000; // characters per saved value
   const MAX_KEYS = 16;
   const DEBOUNCE_MS = 2500; // wait for the game to stop saving, then push
@@ -398,6 +398,7 @@
           catch (e) { return { slug, outcome: "error", error: e && e.message ? e.message : "Sync failed." }; }
         }));
       }
+      results.push(await syncProfile(opts));
       const bad = results.find((r) => r.outcome === "error");
       finish(bad ? new Error(bad.error) : null);
       return { ok: !bad, results };
@@ -407,11 +408,81 @@
     }
   }
 
+  // ---------------------------------------------------------------- the player profile (name + colour)
+  // One small profile per player, shared by every game: localStorage "lorpcade:profile" holds JSON
+  //   { "multiplayer_name": "ACE", "mech_colour": 5, "updated_at": 1700000000000, ...keys other programs added }
+  // and, with a sync code, the same two values live in the cloud at saves/{CODE}/games/profile = { v, at, dev,
+  // data: { name, colour } } (`at` = updated_at). The newest change wins, on every platform (the Windows builds
+  // do the same in src/sync/profile_sync.rs). "profile" is a reserved game name, so it never collides with a save.
+  const PROFILE_SLUG = "profile";
+  const KEY_PROFILE = "lorpcade:profile";
+  const cleanName = (s) => String(s == null ? "" : s).toUpperCase().replace(/[^A-Z0-9 _-]/g, "").trim().slice(0, 12);
+  const cleanColour = (c) => { c = Number(c); return Number.isInteger(c) && c >= 0 && c < 64 ? c : -1; };
+  function readProfile() {
+    try { const o = JSON.parse(rawGet(KEY_PROFILE)); return o && typeof o === "object" && !Array.isArray(o) ? o : {}; } catch (_) { return {}; }
+  }
+  function getProfile() {
+    const p = readProfile();
+    return { name: cleanName(p.multiplayer_name) || "PILOT", colour: cleanColour(p.mech_colour) >= 0 ? Number(p.mech_colour) : 5, updatedAt: Number(p.updated_at) || 0 };
+  }
+  // Change the name and/or colour (the home screen's editor); the other keys in the profile are kept.
+  function setProfile(change) {
+    const p = readProfile();
+    if (change && change.name != null) p.multiplayer_name = cleanName(change.name) || "PILOT";
+    if (change && cleanColour(change.colour) >= 0) p.mech_colour = Number(change.colour);
+    p.updated_at = Date.now();
+    rawSet(KEY_PROFILE, JSON.stringify(p));
+    scheduleProfilePush();
+    return getProfile();
+  }
+  let profileTimer = 0;
+  function scheduleProfilePush() {
+    if (!cfg || !getCode()) return;
+    clearTimeout(profileTimer);
+    profileTimer = setTimeout(() => syncProfile({ keepalive: false }), 1500);
+  }
+  function syncProfile(opts = {}) {
+    return serial(PROFILE_SLUG, async () => {
+      await ready;
+      const code = getCode();
+      if (!cfg || !code) return { slug: PROFILE_SLUG, outcome: "off" };
+      begin();
+      try {
+        const loc = readProfile(), lat = Number(loc.updated_at) || 0;
+        const r = await http("GET", cfg.base + docPath(code, PROFILE_SLUG) + "?key=" + enc(cfg.key), null, opts);
+        let cloud = null;
+        if (r.status === 200) {
+          const d = fromDoc(PROFILE_SLUG, r.json), n = cleanName(d.data.name), c = cleanColour(d.data.colour);
+          if (n && c >= 0) cloud = { updateTime: d.updateTime, at: d.at, name: n, colour: c };
+        } else if (r.status !== 404) throw apiError(r);
+        let outcome = "none";
+        if (cloud && cloud.at > lat) {
+          rawSet(KEY_PROFILE, JSON.stringify(Object.assign({}, loc, { multiplayer_name: cloud.name, mech_colour: cloud.colour, updated_at: cloud.at })));
+          outcome = "downloaded";
+          try { window.dispatchEvent(new CustomEvent("lorpcade:profile")); } catch (_) {}
+        } else if (lat > 0 && (!cloud || lat > cloud.at)) {
+          const mine = getProfile();
+          const q = ["key=" + enc(cfg.key)].concat(["v", "at", "dev", "data"].map((f) => "updateMask.fieldPaths=" + f))
+            .concat(cloud ? "currentDocument.updateTime=" + enc(cloud.updateTime) : "currentDocument.exists=false").join("&");
+          const w = await http("PATCH", cfg.base + docPath(code, PROFILE_SLUG) + "?" + q, toBody({ name: mine.name, colour: String(mine.colour) }, lat), opts);
+          if (w.status === 200) outcome = "uploaded";
+          else if (!isConflict(w)) throw apiError(w); // a conflict means another device wrote first: the next sync settles it
+        }
+        finish(null);
+        return { slug: PROFILE_SLUG, outcome };
+      } catch (e) {
+        finish(e);
+        return { slug: PROFILE_SLUG, outcome: "error", error: e && e.message ? e.message : "Sync failed." };
+      }
+    });
+  }
+
   // ---------------------------------------------------------------- automatic syncing
   const watched = new Map(); // slug -> { timer, first, onRemote, polled }
   let hooked = false;
   function touch(slug) { const st = loadSt(slug); st.at = Date.now(); saveSt(slug, st); }
   function onLocalWrite(key) {
+    if (key === KEY_PROFILE) { scheduleProfilePush(); return; }
     const p = parseKey(key), w = p && watched.get(p.slug);
     if (!w || !cfg || !getCode()) return;
     touch(p.slug);
@@ -601,6 +672,7 @@
     getCode, setCode, newCode, clearCode, validCode, formatCode, normalizeCode,
     info, on, label, validators,
     syncGame, syncAll, watch, autoSync, flush, checkRemote,
+    profile: { get: getProfile, set: setProfile, sync: syncProfile },
     openDialog, restoreBackup,
   };
 })();

@@ -206,6 +206,39 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vh, 40px) clamp(
 }
 .deck .hi-val { font-weight: 400; text-transform: none; color: var(--yellow); text-shadow: 0 0 8px rgba(255, 225, 77, .55); }
 
+/* ---------- native download: the white Windows logo, right of the score ---------- */
+.slot { container-type: inline-size; }
+.exe {
+  --fs: clamp(12px, 5.6cqi, 22px); --h: calc(var(--fs) * 1.6);
+  position: absolute; z-index: 2; right: calc(6px + 14px); bottom: calc(6px + 14px + var(--fs) * .7 - var(--h) / 2);
+  width: var(--h); height: var(--h); display: grid; place-items: center; color: #fff; text-decoration: none;
+  transition: transform .12s steps(2), filter .12s steps(2);
+}
+.exe .winlogo { width: 100%; height: 100%; filter: drop-shadow(2px 2px 0 var(--void)) drop-shadow(0 0 0 #fff); shape-rendering: crispEdges; }
+.exe:hover, .exe:focus-visible { filter: drop-shadow(0 0 8px var(--cyan)); outline: 2px dashed var(--cyan); outline-offset: 3px; }
+.slot:has(.cab:hover) .exe, .slot:has(.cab:focus-visible) .exe { transform: translateY(-6px); }
+.exe:hover { transform: translateY(-8px); }
+
+/* ---------- player (name + colour) ---------- */
+.hud #who .sw { display: inline-block; width: 1em; height: 1em; margin-left: .8em; vertical-align: -.15em; border: 2px solid var(--ink); background: var(--c, #ff942e); }
+.who { max-width: min(92vw, 520px); width: 100%; max-height: 92vh; overflow: auto; padding: 18px 20px; border: 3px solid var(--magenta);
+  background: #170a3c; color: var(--ink); font: 20px/1.3 var(--body); box-shadow: 0 0 30px rgba(255, 46, 151, .5); }
+.who::backdrop { background: rgba(5, 1, 15, .8); }
+.who h2 { margin: 0 0 10px; font: 12px/1.4 var(--display); color: var(--cyan); }
+.who p { margin: 8px 0; } .who small { color: var(--dim); }
+.who label { display: block; margin-top: 12px; font: 10px/1.4 var(--display); color: var(--yellow); text-transform: uppercase; }
+.who input[type=text] { width: 100%; margin-top: 6px; padding: 8px 10px; font: inherit; font-size: 24px; text-transform: uppercase; letter-spacing: .1em; color: var(--ink); background: var(--void); border: 2px solid #7a6ac0; border-radius: 0; }
+.who .fam { margin: 10px 0 2px; font: 9px/1 var(--display); color: var(--dim); text-transform: uppercase; }
+.who .grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; }
+.who .grid button { aspect-ratio: 1; border: 2px solid transparent; border-radius: 0; background: var(--c); cursor: pointer; padding: 0; }
+.who .grid button[aria-pressed="true"] { border-color: #fff; outline: 2px solid var(--void); box-shadow: 0 0 0 4px var(--magenta); position: relative; z-index: 1; }
+.who .grid button:focus-visible { border-color: var(--yellow); outline: none; }
+.who .row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; align-items: center; }
+.who .row button { font: 10px/1 var(--display); text-transform: uppercase; color: var(--ink); background: #241058; border: 2px solid #7a6ac0; border-radius: 0; padding: 10px 12px; cursor: pointer; }
+.who .row button.go { background: var(--magenta); border-color: var(--magenta); color: #12002a; }
+.who .pv { margin-left: auto; font: 11px/1 var(--display); display: flex; align-items: center; gap: 8px; }
+.who .pv i { width: 22px; height: 22px; border: 2px solid var(--ink); background: var(--c); }
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
@@ -218,6 +251,7 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vh, 40px) clamp(
   <div><span class="lbl">Games</span><span class="val">{{GAME_COUNT}}</span></div>
   <div class="free">Select a game</div>
   <div class="btns">
+    <button id="who" type="button" aria-haspopup="dialog" title="Your name and colour in every game that has multiplayer"><span class="lbl">Pilot</span><b>PILOT</b><i class="sw" aria-hidden="true"></i></button>
     <button id="sync" type="button" hidden aria-haspopup="dialog"><span class="lbl">Sync</span><b>Off</b></button>
     <button id="snd" type="button" aria-pressed="false" data-music="{{MUSIC}}"><span class="lbl">Sound</span><b>Off</b></button>
   </div>
@@ -233,6 +267,16 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vh, 40px) clamp(
   </ul>
 </main>
 
+
+<dialog class="who" id="whoDlg" aria-labelledby="whoH">
+  <h2 id="whoH">Your pilot</h2>
+  <p>The name and colour games with multiplayer show for you. They follow you into every game, and across devices when Sync is on.<br><small>A game may use the colour as it is or only as a hint.</small></p>
+  <label for="whoName">Name</label>
+  <input id="whoName" type="text" maxlength="12" autocomplete="off" spellcheck="false">
+  <label>Colour <span id="whoColName" style="color:var(--ink)"></span></label>
+  <div id="whoGrid"></div>
+  <div class="row"><button class="go" id="whoSave" type="button">Save</button><button id="whoCancel" type="button">Cancel</button><span class="pv"><i id="whoPv"></i><b id="whoPvName"></b></span></div>
+</dialog>
 
 <script src="arcade-assets/lorpcade-sync.js"></script>
 <script>
@@ -339,6 +383,72 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vh, 40px) clamp(
   });
   paintScores();
 
+  // Player profile: the name and colour every game with multiplayer can use. It lives in localStorage "lorpcade:profile"
+  // (the same JSON the Windows games keep in %APPDATA%\\LORPcade\\profile.json) and, with Sync on, in the cloud.
+  // The colour is an index 0..63 into this table (families of eight shades, 1 = darkest, 8 = palest).
+  const FAMS = ["EMBER", "CRIMSON", "AMBER", "OLIVE", "TEAL", "STEEL", "VIOLET", "GUNMETAL"];
+  const RGB = [[166,81,7],[197,96,8],[228,111,10],[245,127,24],[247,144,55],[255,148,46],[249,178,117],[251,195,147],
+    [156,17,22],[185,21,26],[214,24,30],[231,39,45],[234,67,73],[237,96,101],[241,125,129],[244,154,157],
+    [166,124,7],[197,147,8],[228,170,10],[245,186,24],[247,196,55],[248,205,86],[249,214,117],[251,223,147],
+    [90,140,33],[107,166,39],[124,192,45],[140,209,60],[155,215,86],[170,222,112],[186,228,138],[201,234,164],
+    [24,149,132],[29,177,157],[33,204,181],[48,221,198],[76,226,206],[103,230,213],[131,235,221],[159,239,229],
+    [26,87,147],[31,103,175],[36,119,202],[51,135,219],[78,151,224],[105,167,229],[132,183,233],[160,199,238],
+    [108,33,140],[128,39,166],[148,45,192],[165,60,209],[177,86,215],[189,112,222],[201,138,228],[213,164,234],
+    [69,75,84],[90,98,110],[111,121,135],[136,145,157],[161,169,178],[187,192,199],[213,216,220],[238,239,241]];
+  const hex = i => "rgb(" + RGB[i].join(",") + ")";
+  const colName = i => FAMS[i >> 3] + " " + ((i & 7) + 1);
+  const cleanName = s => String(s == null ? "" : s).toUpperCase().replace(/[^A-Z0-9 _-]/g, "").trim().slice(0, 12);
+  const readProfile = () => { try { const o = JSON.parse(readStore("lorpcade:profile")); return o && typeof o === "object" && !Array.isArray(o) ? o : {}; } catch (e) { return {}; } };
+  const getProfile = () => {
+    if (window.LorpSync && LorpSync.profile) return LorpSync.profile.get();
+    const p = readProfile(), c = Number(p.mech_colour);
+    return { name: cleanName(p.multiplayer_name) || "PILOT", colour: Number.isInteger(c) && c >= 0 && c < 64 ? c : 5 };
+  };
+  const setProfile = (name, colour) => {
+    if (window.LorpSync && LorpSync.profile) { LorpSync.profile.set({ name, colour }); return; }
+    const p = readProfile(); p.multiplayer_name = cleanName(name) || "PILOT"; p.mech_colour = colour; p.updated_at = Date.now();
+    try { localStorage.setItem("lorpcade:profile", JSON.stringify(p)); } catch (e) {}
+  };
+  const whoBtn = document.getElementById("who"), dlg = document.getElementById("whoDlg");
+  const nameIn = document.getElementById("whoName"), grid = document.getElementById("whoGrid");
+  let pick = 5;
+  const paintWho = () => {
+    const p = getProfile();
+    whoBtn.querySelector("b").textContent = p.name;
+    whoBtn.querySelector(".sw").style.setProperty("--c", hex(p.colour));
+  };
+  const paintPick = () => {
+    grid.querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", +b.dataset.i === pick));
+    document.getElementById("whoColName").textContent = colName(pick);
+    document.getElementById("whoPv").style.setProperty("--c", hex(pick));
+    document.getElementById("whoPvName").textContent = cleanName(nameIn.value) || "PILOT";
+  };
+  FAMS.forEach((f, fi) => {
+    const h = document.createElement("div"); h.className = "fam"; h.textContent = f; grid.appendChild(h);
+    const g = document.createElement("div"); g.className = "grid";
+    for (let k = 0; k < 8; k++) {
+      const i = fi * 8 + k, b = document.createElement("button");
+      b.type = "button"; b.dataset.i = i; b.title = colName(i); b.setAttribute("aria-label", colName(i)); b.style.setProperty("--c", hex(i));
+      b.addEventListener("click", () => { pick = i; tone(440 + k * 40); paintPick(); });
+      g.appendChild(b);
+    }
+    grid.appendChild(g);
+  });
+  whoBtn.addEventListener("click", () => {
+    const p = getProfile(); nameIn.value = p.name; pick = p.colour; paintPick();
+    if (dlg.showModal) dlg.showModal(); else dlg.setAttribute("open", "");
+    nameIn.select();
+  });
+  nameIn.addEventListener("input", () => { nameIn.value = nameIn.value.toUpperCase().replace(/[^A-Z0-9 _-]/g, ""); paintPick(); });
+  const closeWho = () => { if (dlg.close) dlg.close(); else dlg.removeAttribute("open"); };
+  document.getElementById("whoSave").addEventListener("click", () => { setProfile(nameIn.value, pick); paintWho(); tone(880); closeWho(); });
+  document.getElementById("whoCancel").addEventListener("click", closeWho);
+  nameIn.addEventListener("keydown", e => { if (e.key === "Enter") document.getElementById("whoSave").click(); });
+  addEventListener("lorpcade:profile", paintWho);        // the cloud had a newer one
+  addEventListener("storage", e => { if (e.key === "lorpcade:profile") paintWho(); });
+  paintWho();
+
+
   // Cloud saves (arcade-assets/lorpcade-sync.js). The button only appears once the site has a Firebase config.
   // Sync runs when this page opens and whenever it comes back into view: it pulls what other devices saved, pushes
   // anything a game page did not get to send before it was closed, and repaints the HI lines.
@@ -365,7 +475,7 @@ main { max-width: 1240px; margin: 0 auto; padding: clamp(20px, 4vh, 40px) clamp(
   // Arrow keys step through the cabinets.
   document.addEventListener("keydown", e => {
     const step = { ArrowLeft: -1, ArrowUp: -1, ArrowRight: 1, ArrowDown: 1 }[e.key];
-    if (!step || e.altKey || e.ctrlKey || e.metaKey || !cards.length) return;
+    if (!step || dlg.open || e.altKey || e.ctrlKey || e.metaKey || !cards.length) return;
     const i = cards.indexOf(document.activeElement);
     if (i < 0 && (e.key === "ArrowUp" || e.key === "ArrowDown")) return;   // let the page scroll
     e.preventDefault();
